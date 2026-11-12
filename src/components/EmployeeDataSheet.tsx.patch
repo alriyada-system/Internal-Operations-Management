@@ -1,0 +1,43 @@
+import React, { useState, useRef, useEffect } from 'react';
+
+// At the top of the file, define ResizableTh
+const ResizableTh = ({ children, className, minWidth = 100 }: any) => {
+  const [width, setWidth] = useState<number | 'auto'>('auto');
+  const thRef = useRef<HTMLTableCellElement>(null);
+  
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.pageX;
+    const startWidth = thRef.current?.getBoundingClientRect().width || 0;
+    
+    const doDrag = (dragEvent: MouseEvent) => {
+      // In RTL, moving left means increasing width if we drag the left border.
+      // Assuming handle is on the left edge (in RTL it's the end edge).
+      const newWidth = startWidth + (startX - dragEvent.pageX);
+      setWidth(Math.max(minWidth, newWidth));
+    };
+    
+    const stopDrag = () => {
+      document.removeEventListener('mousemove', doDrag);
+      document.removeEventListener('mouseup', stopDrag);
+    };
+    
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('mouseup', stopDrag);
+  };
+
+  return (
+    <th 
+      ref={thRef} 
+      className={`relative ${className}`}
+      style={{ width: width === 'auto' ? 'auto' : `${width}px`, minWidth: width === 'auto' ? `${minWidth}px` : `${width}px` }}
+    >
+      {children}
+      {/* Resizer Handle for RTL (appears on the left side of the th) */}
+      <div 
+        onMouseDown={startResize}
+        className="absolute top-0 left-0 w-2 h-full cursor-col-resize hover:bg-teal-500/50 z-10 transition-colors"
+      />
+    </th>
+  );
+};
