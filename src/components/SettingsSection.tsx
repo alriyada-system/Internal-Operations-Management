@@ -189,6 +189,7 @@ export default function SettingsSection({
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('staff');
   const [newUserBranchId, setNewUserBranchId] = useState('branch-1');
+  const [branchesEditMode, setBranchesEditMode] = useState(false); // الحقول للعرض فقط حتى يضغط المدير «تعديل»
   
   // Branch state fields
   const [newBranchName, setNewBranchName] = useState('');
@@ -1201,6 +1202,25 @@ export default function SettingsSection({
               هنا يمكنك التحكم الكامل في جميع الفروع المسجلة في النظام، وإضافة فروع جديدة للمؤسسة، ونقل الموظفين بين الفروع المختلفة وتعديل صلاحياتهم وظهور البيانات لديهم تلقائياً.
             </p>
 
+            {/* View-only by default; the admin must click "تعديل" to unlock the fields */}
+            <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5 ${branchesEditMode ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+              <span className="text-xs font-semibold text-slate-600">
+                {branchesEditMode ? '✏️ وضع التعديل مفعّل — يمكنك الآن تحرير الحقول وحفظ التغييرات.' : '🔒 الحقول معروضة للقراءة فقط. اضغط «تعديل» لفتحها للتحرير.'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setBranchesEditMode(m => !m)}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer active:scale-95 ${branchesEditMode ? 'bg-white border border-amber-300 text-amber-700 hover:bg-amber-100' : 'bg-teal-600 hover:bg-teal-700 text-white shadow-xs'}`}
+              >
+                {branchesEditMode ? 'إنهاء التعديل' : '✏️ تعديل'}
+              </button>
+            </div>
+
+            <fieldset
+              disabled={!branchesEditMode}
+              className="border-0 p-0 m-0 min-w-0 space-y-5 [&_input:disabled]:bg-slate-50 [&_input:disabled]:text-slate-600 [&_select:disabled]:bg-slate-50 [&_select:disabled]:text-slate-600 [&_textarea:disabled]:bg-slate-50 [&_textarea:disabled]:text-slate-600 [&_button:disabled]:opacity-40 [&_button:disabled]:cursor-not-allowed"
+            >
+
             {/* -------------------- Core Company Details (تعديل بيانات الأساسية للشركة) -------------------- */}
             <div className="bg-gradient-to-br from-teal-50/60 via-slate-50/80 to-emerald-50/40 border border-teal-100 rounded-xl p-4 sm:p-5 shadow-xs space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100/70 pb-3">
@@ -1666,6 +1686,7 @@ export default function SettingsSection({
                 </div>
               </div>
             </div>
+            </fieldset>
           </div>
         )}
 
