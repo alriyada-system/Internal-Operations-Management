@@ -193,6 +193,13 @@ export default function App() {
     branchId: 'branch-1'
   } as any as User : null);
 
+  // --- Public branding (readable before login: company name / logo / subtitle) ---
+  const [publicBranding, setPublicBranding] = useState<any>({});
+  useEffect(() => {
+    supabase.from('public_branding').select('data').eq('id', 'main').maybeSingle()
+      .then(({ data }) => { if (data?.data) setPublicBranding(data.data); });
+  }, []);
+
   // --- System Settings ---
   const systemSettingsUser = users.find(u => u.id === 'system_settings_config');
   const systemSettings = {
@@ -214,8 +221,30 @@ export default function App() {
     companyEmail: 'sanad.oman.r3@gmail.com',
     companyAddress: 'سلطنة عُمان - إبراء',
     companySubtitle: 'شركائك في نجاح أعمالك .. كل الخدمات في مكان واحد',
+    ...publicBranding,
     ...(systemSettingsUser?.systemSettings || {})
   };
+
+  // Admin publishes branding so the login page of every visitor shows the current company identity
+  const lastBrandingPushRef = useRef('');
+  useEffect(() => {
+    if (!isDbLoaded || currentUser?.role !== 'admin' || simulationOriginalUserId) return;
+    const branding = {
+      companyName: systemSettings.companyName,
+      companyNameEn: systemSettings.companyNameEn,
+      companySubtitle: systemSettings.companySubtitle,
+      companyLogo: systemSettings.companyLogo,
+    };
+    const str = JSON.stringify(branding);
+    if (str === lastBrandingPushRef.current) return;
+    const t = setTimeout(async () => {
+      const { error } = await supabase.from('public_branding').upsert({ id: 'main', data: branding, updated_at: new Date().toISOString() });
+      if (!error) lastBrandingPushRef.current = str;
+      else console.warn('public_branding sync failed:', error.message);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [systemSettings.companyName, systemSettings.companyNameEn, systemSettings.companySubtitle, systemSettings.companyLogo, isDbLoaded, currentUserId]);
+
 
   useEffect(() => {
     if (systemSettings.companyName) {
@@ -1818,7 +1847,7 @@ export default function App() {
           </form>
           
           <div className="text-[10px] text-slate-400 pt-2 font-sans">
-            المنصة الرقمية الموحدة - مركز سند الريادة للخدمات © 2026
+            المنصة الرقمية الموحدة - {systemSettings.companyName || 'مركز سند الريادة للخدمات'} © 2026
           </div>
         </div>
       </div>
