@@ -305,7 +305,7 @@ export default function UserGuideSection({ systemSettings }: { systemSettings?: 
       
       const coverHtml = `
         <div style="text-align: center; margin-bottom: 50px;">
-          <img src="${window.location.origin}/main-interface.png" alt="واجهة النظام الرئيسية" style="width: 100%; max-width: 800px; border: 1px solid #ccc; margin-bottom: 20px;" />
+          <img src="${window.location.origin}${import.meta.env.BASE_URL}main-interface.png" alt="واجهة النظام الرئيسية" style="width: 100%; max-width: 800px; border: 1px solid #ccc; margin-bottom: 20px;" />
           <p style="text-align: justify; line-height: 1.6; font-size: 14px;">
             توفر المنصة بيئة عمل مركزية تدمج بدقة وسرعة بين:
           </p>
@@ -370,7 +370,7 @@ export default function UserGuideSection({ systemSettings }: { systemSettings?: 
 
             <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm break-inside-avoid">
               <div className="p-4 bg-slate-50 flex flex-col items-center">
-                 <img src={`${window.location.origin}/main-interface.png`} alt="واجهة النظام الرئيسية" className="w-full max-w-4xl rounded-xl border border-slate-200 shadow-sm mb-6 object-contain" />
+                 <img src={`${window.location.origin}${import.meta.env.BASE_URL}main-interface.png`} alt="واجهة النظام الرئيسية" className="w-full max-w-4xl rounded-xl border border-slate-200 shadow-sm mb-6 object-contain" />
               </div>
             </div>
 
