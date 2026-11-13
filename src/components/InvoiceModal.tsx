@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Invoice, InvoiceItem, Customer, InvoiceStatus, Service, User, Payment, UserRole, PaymentMethod } from '../types';
-import { X, Plus, Trash2, Hash, FileText, Activity, Percent, Coins, UserCheck, Phone, Search, Printer, Users, Lock, Unlock, Download } from 'lucide-react';
+import { X, Plus, Trash2, GripVertical, Hash, FileText, Activity, Percent, Coins, UserCheck, Phone, Search, Printer, Users, Lock, Unlock, Download } from 'lucide-react';
 import CustomerModal from './CustomerModal';
 import ChatBox from './ChatBox';
 
@@ -49,6 +49,24 @@ export default function InvoiceModal({
   const [newPaymentAmount, setNewPaymentAmount] = useState<number>(0);
   const [newPaymentMethod, setNewPaymentMethod] = useState<PaymentMethod>('cash');
   const [activeServiceDropdownIndex, setActiveServiceDropdownIndex] = useState<number | null>(null);
+
+  // Drag & drop reordering of invoice item rows (grip handle in the first cell)
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ index: number; after: boolean } | null>(null);
+
+  const moveItemRow = (from: number, to: number, after: boolean) => {
+    setItems(prev => {
+      if (from < 0 || from >= prev.length) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(from, 1);
+      // `to` refers to the index in the ORIGINAL array; adjust after removal
+      let insertAt = to + (after ? 1 : 0);
+      if (from < insertAt) insertAt -= 1;
+      updated.splice(insertAt, 0, moved);
+      return updated;
+    });
+    setActiveServiceDropdownIndex(null);
+  };
   const [status, setStatus] = useState<InvoiceStatus>('unpaid');
   const [createdAt, setCreatedAt] = useState<string>('');
   const [closingDate, setClosingDate] = useState<string>('');
@@ -872,7 +890,8 @@ branchId: invoiceToEdit?.branchId || activeBranchId,
             </div>
 
             {/* Table Header */}
-            <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
+            <div className="hidden md:grid md:grid-cols-[28px_repeat(12,minmax(0,1fr))] gap-3 px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
+              <div className="text-center" title="اسحب لإعادة الترتيب">#</div>
               <div className="col-span-4">تفاصيل الخدمة / البند</div>
               <div className="col-span-2 text-center">الموظف</div>
               <div className="col-span-1 text-center">الكمية</div>
@@ -886,8 +905,56 @@ branchId: invoiceToEdit?.branchId || activeBranchId,
               {items.map((item, index) => (
                 <div 
                   key={item.id} 
-                  className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 md:p-0 bg-slate-50 md:bg-transparent rounded-xl border border-slate-100 md:border-0"
+                  data-item-row
+                  onDragOver={(e) => {
+                    if (dragIndex === null || dragIndex === index) return;
+                    e.preventDefault();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    const after = (e.clientY - r.top) > r.height / 2;
+                    if (!dropTarget || dropTarget.index !== index || dropTarget.after !== after) setDropTarget({ index, after });
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(t => (t && t.index === index ? null : t));
+                  }}
+                  onDrop={(e) => {
+                    if (dragIndex === null || dragIndex === index) return;
+                    e.preventDefault();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    const after = (e.clientY - r.top) > r.height / 2;
+                    moveItemRow(dragIndex, index, after);
+                    setDragIndex(null);
+                    setDropTarget(null);
+                  }}
+                  className={`grid grid-cols-1 md:grid-cols-[28px_repeat(12,minmax(0,1fr))] gap-3 items-center p-3 md:p-0 bg-slate-50 md:bg-transparent rounded-xl border border-slate-100 md:border-0 transition-shadow ${
+                    dragIndex === index ? 'opacity-40 md:bg-sky-50' : ''
+                  } ${
+                    dropTarget && dropTarget.index === index && dragIndex !== index
+                      ? (dropTarget.after ? 'shadow-[inset_0_-3px_0_#0093c4]' : 'shadow-[inset_0_3px_0_#0093c4]')
+                      : ''
+                  }`}
                 >
+                  {/* Drag handle + row number (desktop; HTML5 drag & drop) */}
+                  <div
+                    className={`hidden md:flex flex-col items-center justify-center select-none leading-none ${
+                      isLocked ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:text-sky-600 cursor-grab active:cursor-grabbing'
+                    }`}
+                    draggable={!isLocked}
+                    title={isLocked ? 'الفاتورة مغلقة' : 'اسحب لإعادة الترتيب'}
+                    onDragStart={(e) => {
+                      if (isLocked) { e.preventDefault(); return; }
+                      setDragIndex(index);
+                      try {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', 'row');
+                        const rowEl = (e.currentTarget as HTMLElement).closest('[data-item-row]') as HTMLElement | null;
+                        if (rowEl) e.dataTransfer.setDragImage(rowEl, 20, 20);
+                      } catch (_) { /* ignore */ }
+                    }}
+                    onDragEnd={() => { setDragIndex(null); setDropTarget(null); }}
+                  >
+                    <GripVertical className="w-4 h-4" />
+                    <span className="text-[10px] text-slate-500 mt-0.5">{index + 1}</span>
+                  </div>
                   {/* Service Description */}
                   <div className="col-span-1 md:col-span-4 space-y-1 md:space-y-0 relative">
                     <span className="text-xs font-semibold text-slate-500 md:hidden block">تفاصيل الخدمة</span>
