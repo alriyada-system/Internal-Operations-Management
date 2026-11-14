@@ -171,7 +171,9 @@ export default function ChatBox({
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  const [isCollapsedState, setIsCollapsed] = useState(defaultCollapsed);
+  // Floating / sidebar windows are never collapsed (minimise = floating button)
+  const isCollapsed = isCollapsedState && currentMode !== 'floating' && currentMode !== 'sidebar';
 
   useEffect(() => {
     setIsCollapsed(defaultCollapsed);
@@ -653,7 +655,7 @@ export default function ChatBox({
   const chatMarkup = (
     <div className={`border overflow-hidden flex flex-col w-full text-right transition-colors duration-200 ${
       isOverlay
-        ? 'h-full bg-linear-to-br from-white/55 via-teal-50/35 to-sky-100/45 backdrop-blur-2xl backdrop-saturate-150 border-white/60 shadow-2xl ring-1 ring-slate-900/10'
+        ? 'h-full bg-linear-to-br from-white/35 via-teal-50/20 to-sky-100/30 backdrop-blur-md backdrop-saturate-150 border-white/60 shadow-2xl ring-1 ring-slate-900/10'
         : 'bg-white shadow-xl border-slate-100'
     } ${currentMode === 'sidebar' ? 'rounded-none rounded-e-2xl' : 'rounded-2xl'} ${
       currentMode === 'floating' ? 'ring-4 ring-teal-500/10' : ''
@@ -664,7 +666,7 @@ export default function ChatBox({
         onPointerDown={startMove}
         style={{ touchAction: currentMode === 'floating' ? 'none' : undefined }}
         className={`px-4 py-3 border-b border-slate-100/80 flex items-center justify-between select-none shrink-0 ${
-          isOverlay ? 'bg-white/25' : 'bg-slate-50/80'
+          isOverlay ? 'bg-white/15' : 'bg-slate-50/80'
         } ${currentMode === 'floating' ? 'cursor-grab active:cursor-grabbing' : ''}`}
       >
         <div className="flex items-center gap-2 overflow-hidden">
@@ -754,7 +756,7 @@ export default function ChatBox({
 
       {/* Main Collapsible Chat Body */}
       <AnimatePresence initial={false}>
-        {!isCollapsed && (
+        {(!isCollapsed || isOverlay) && (
           <motion.div
             initial={isOverlay ? { opacity: 0 } : { height: 0, opacity: 0 }}
             animate={isOverlay ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
@@ -843,7 +845,7 @@ export default function ChatBox({
                             <div className={`p-3 rounded-2xl text-[11px] leading-relaxed break-words shadow-2xs flex flex-col gap-2 ${
                               isMe 
                                 ? 'bg-teal-600 text-white rounded-tl-none font-medium' 
-                                : (isOverlay ? 'bg-white/85 backdrop-blur-sm border border-white/70 text-slate-800 rounded-tr-none shadow-xs' : 'bg-white border border-slate-100 text-slate-800 rounded-tr-none')
+                                : (isOverlay ? 'bg-white/80 border border-white/70 text-slate-800 rounded-tr-none shadow-xs' : 'bg-white border border-slate-100 text-slate-800 rounded-tr-none')
                             }`}>
                               
                               {/* Replied content preview inside bubble */}
@@ -956,7 +958,7 @@ export default function ChatBox({
             </AnimatePresence>
 
             {/* Input container */}
-            <form onSubmit={handleSendMessage} className={`p-3 border-t border-slate-100/80 flex flex-col gap-2 relative shrink-0 ${isOverlay ? 'bg-white/30 backdrop-blur-md' : 'bg-white'}`}>
+            <form onSubmit={handleSendMessage} className={`p-3 border-t border-slate-100/80 flex flex-col gap-2 relative shrink-0 ${isOverlay ? 'bg-white/20' : 'bg-white'}`}>
               
               {/* Replying to message preview bar */}
               <AnimatePresence>
