@@ -653,7 +653,7 @@ export default function ChatBox({
   const chatMarkup = (
     <div className={`border overflow-hidden flex flex-col w-full text-right transition-colors duration-200 ${
       isOverlay
-        ? 'h-full bg-white/70 backdrop-blur-xl backdrop-saturate-150 border-white/70 shadow-2xl ring-1 ring-slate-900/5'
+        ? 'h-full bg-linear-to-br from-white/55 via-teal-50/35 to-sky-100/45 backdrop-blur-2xl backdrop-saturate-150 border-white/60 shadow-2xl ring-1 ring-slate-900/10'
         : 'bg-white shadow-xl border-slate-100'
     } ${currentMode === 'sidebar' ? 'rounded-none rounded-e-2xl' : 'rounded-2xl'} ${
       currentMode === 'floating' ? 'ring-4 ring-teal-500/10' : ''
@@ -664,7 +664,7 @@ export default function ChatBox({
         onPointerDown={startMove}
         style={{ touchAction: currentMode === 'floating' ? 'none' : undefined }}
         className={`px-4 py-3 border-b border-slate-100/80 flex items-center justify-between select-none shrink-0 ${
-          isOverlay ? 'bg-white/40' : 'bg-slate-50/80'
+          isOverlay ? 'bg-white/25' : 'bg-slate-50/80'
         } ${currentMode === 'floating' ? 'cursor-grab active:cursor-grabbing' : ''}`}
       >
         <div className="flex items-center gap-2 overflow-hidden">
@@ -756,13 +756,13 @@ export default function ChatBox({
       <AnimatePresence initial={false}>
         {!isCollapsed && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={isOverlay ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            animate={isOverlay ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+            exit={isOverlay ? { opacity: 0 } : { height: 0, opacity: 0 }}
             className={`flex flex-col overflow-hidden ${isOverlay ? 'flex-1 min-h-0' : ''}`}
           >
             {/* Messages area */}
-            <div ref={scrollContainerRef} className={`p-4 overflow-y-auto space-y-3.5 ${isOverlay ? 'bg-white/10 flex-1 min-h-0' : `bg-slate-50/30 ${heightClass}`}`}>
+            <div ref={scrollContainerRef} className={`p-4 overflow-y-auto space-y-3.5 ${isOverlay ? 'bg-transparent flex-1 min-h-0' : `bg-slate-50/30 ${heightClass}`}`}>
               {loading ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-slate-400 text-xs animate-pulse font-medium">جاري تحميل الرسائل...</div>
@@ -843,7 +843,7 @@ export default function ChatBox({
                             <div className={`p-3 rounded-2xl text-[11px] leading-relaxed break-words shadow-2xs flex flex-col gap-2 ${
                               isMe 
                                 ? 'bg-teal-600 text-white rounded-tl-none font-medium' 
-                                : 'bg-white border border-slate-100 text-slate-800 rounded-tr-none'
+                                : (isOverlay ? 'bg-white/85 backdrop-blur-sm border border-white/70 text-slate-800 rounded-tr-none shadow-xs' : 'bg-white border border-slate-100 text-slate-800 rounded-tr-none')
                             }`}>
                               
                               {/* Replied content preview inside bubble */}
@@ -956,7 +956,7 @@ export default function ChatBox({
             </AnimatePresence>
 
             {/* Input container */}
-            <form onSubmit={handleSendMessage} className={`p-3 border-t border-slate-100/80 flex flex-col gap-2 relative shrink-0 ${isOverlay ? 'bg-white/50' : 'bg-white'}`}>
+            <form onSubmit={handleSendMessage} className={`p-3 border-t border-slate-100/80 flex flex-col gap-2 relative shrink-0 ${isOverlay ? 'bg-white/30 backdrop-blur-md' : 'bg-white'}`}>
               
               {/* Replying to message preview bar */}
               <AnimatePresence>
@@ -1059,7 +1059,7 @@ export default function ChatBox({
                   rows={1}
                   placeholder={currentUser ? (placeholder + " (Shift+Enter لسطر جديد)") : "يجب تسجيل الدخول للكتابة"}
                   disabled={!currentUser}
-                  className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] focus:outline-hidden focus:ring-2 focus:ring-teal-500/15 focus:border-teal-500 focus:bg-white transition-all resize-none min-h-[38px] max-h-[120px] pt-2"
+                  className={`flex-1 p-2 ${isOverlay ? 'bg-white/75' : 'bg-slate-50'} border border-slate-200 rounded-xl text-[11px] focus:outline-hidden focus:ring-2 focus:ring-teal-500/15 focus:border-teal-500 focus:bg-white transition-all resize-none min-h-[38px] max-h-[120px] pt-2`}
                 />
 
                 {/* Send Button */}
