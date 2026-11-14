@@ -34,7 +34,7 @@ import AboutSection from './components/AboutSection';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import { supabase } from './lib/supabase';
 import { loadAll, syncAll, newSnapshot, emptyData, signIn, signOut, fetchMyAppUserId, adminUsers } from './lib/cloud';
-import ChatBox from './components/ChatBox';
+import ChatBox, { type ChatMode } from './components/ChatBox';
 import DatabaseCenter from './components/DatabaseCenter';
 import TrashSection from './components/TrashSection';
 import UserGuideSection from './components/UserGuideSection';
@@ -371,7 +371,7 @@ export default function App() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<{ id: string, number: string } | null>(null);
 
-  const [chatMode, setChatMode] = useState<'docked' | 'floating' | 'hidden'>(() => {
+  const [chatMode, setChatMode] = useState<ChatMode>(() => {
   
       const getBackupData = () => ({
     version: "3.0",
@@ -388,13 +388,32 @@ export default function App() {
     privateMessages,
     deletedInvoices
   });
-  return (localStorage.getItem('general_chat_mode') as 'docked' | 'floating' | 'hidden') || 'hidden';
+  return (localStorage.getItem('general_chat_mode') as ChatMode) || 'hidden';
   });
   const [chatWidth, setChatWidth] = useState(() => Number(localStorage.getItem('riyadah_chat_width')) || 320);
 
-  const handleChatModeChange = (mode: 'docked' | 'floating' | 'hidden') => {
+  const handleChatModeChange = (mode: ChatMode) => {
     setChatMode(mode);
+    setChatCollapsed(false);
     localStorage.setItem('general_chat_mode', mode);
+  };
+
+  // Minimised chat → shown as a floating round button; click restores the previous mode
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [layoutResetNonce, setLayoutResetNonce] = useState(0);
+
+  // Reset chat window position/size, table column widths and other layout prefs
+  const handleResetLayout = () => {
+    ['riyadah_chat_float', 'riyadah_chat_sidebar_w', 'riyadah_chat_width'].forEach(k => {
+      try { localStorage.removeItem(k); } catch { /* ignore */ }
+    });
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('riyadah_layout_')).forEach(k => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+    setChatWidth(320);
+    setChatCollapsed(false);
+    setLayoutResetNonce(n => n + 1);
+    window.dispatchEvent(new Event('riyadah-reset-layout'));
   };
 
   // --- System Settings ---
@@ -2974,7 +2993,7 @@ export default function App() {
   return (
                 <>
                   {/* General Chat Sidebar (rendered when docked) */}
-                  {chatMode === 'docked' && (
+                  {chatMode === 'docked' && !chatCollapsed && (
                     <>
                       {/* Desktop Resizable Chat Sidebar */}
                       <div 
@@ -3017,8 +3036,10 @@ export default function App() {
                             title={chatTitle}
                             placeholder={chatPlaceholder}
                             heightClass="h-[550px]"
+                            defaultCollapsed={false}
                             currentMode="docked"
                             onModeChange={handleChatModeChange}
+                            onMinimize={() => setChatCollapsed(true)}
                           />
                         </div>
                       </div>
@@ -3033,21 +3054,23 @@ export default function App() {
                           heightClass="h-[400px]"
                           currentMode="docked"
                           onModeChange={handleChatModeChange}
+                            onMinimize={() => setChatCollapsed(true)}
                         />
                       </div>
                     </>
                   )}
 
                   {/* Floating Draggable Chat (rendered when floating) */}
-                  {chatMode === 'floating' && (
+                  {(chatMode === 'floating' || chatMode === 'sidebar') && !chatCollapsed && (
                     <ChatBox users={users}
                       channelId={chatChannelId}
                       currentUser={currentUser}
                       title={chatTitle}
                       placeholder={chatPlaceholder}
                       heightClass="h-[380px]"
-                      currentMode="floating"
+                      currentMode={chatMode as ChatMode}
                       onModeChange={handleChatModeChange}
+                            onMinimize={() => setChatCollapsed(true)}
                     />
                   )}
                 </>
@@ -3055,19 +3078,22 @@ export default function App() {
             })()}
 
             {/* Floating Toggle Activator Badge when hidden */}
-            {chatMode === 'hidden' && (
+            {(chatMode === 'hidden' || chatCollapsed) && (
               <div className="fixed bottom-6 left-6 z-[9998]">
                 <motion.button
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  whileHover={{ scale: 1.05 }}
+                  whileHover={{ scale: 1.08 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => handleChatModeChange('floating')}
-                  className="bg-teal-600 hover:bg-teal-700 text-white rounded-full px-5 py-3.5 shadow-xl flex items-center gap-2 cursor-pointer border border-teal-500/20 font-bold"
+                  onClick={() => chatCollapsed ? setChatCollapsed(false) : handleChatModeChange('floating')}
+                  title={chatCollapsed ? 'فتح المحادثة' : 'فتح شات الموظفين'}
+                  className={`bg-teal-600 hover:bg-teal-700 text-white shadow-xl flex items-center justify-center gap-2 cursor-pointer border border-teal-500/20 font-bold relative ${
+                    chatCollapsed ? 'w-14 h-14 rounded-full' : 'rounded-full px-5 py-3.5'
+                  }`}
                 >
-                  <MessageSquare className="w-4 h-4" />
-                  <span className="text-xs">فتح شات الموظفين</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <MessageSquare className={chatCollapsed ? 'w-6 h-6' : 'w-4 h-4'} />
+                  {!chatCollapsed && <span className="text-xs">فتح شات الموظفين</span>}
+                  <span className={`w-2 h-2 rounded-full bg-emerald-400 animate-pulse ${chatCollapsed ? 'absolute top-2 right-2 ring-2 ring-teal-600' : 'w-1.5 h-1.5'}`}></span>
                 </motion.button>
               </div>
             )}
@@ -3143,6 +3169,7 @@ export default function App() {
             setUsers={setUsers}
             tickets={tickets}
             onOpenPasswordModal={(userId?: string) => setPasswordModalTargetId(userId || currentUser.id)}
+            onResetLayout={handleResetLayout}
           />
         )}
 
@@ -3582,7 +3609,7 @@ export default function App() {
                     <div className="bg-white border border-slate-100 rounded-2xl shadow-2xs overflow-hidden">
 
                       <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-right border-collapse">
+                        <table key={layoutResetNonce} className="w-full text-xs text-right border-collapse">
                           <thead>
                             <tr className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-100">
                               <th className="p-4 w-[15%] resize-x overflow-auto">
