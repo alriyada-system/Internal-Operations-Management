@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
@@ -29,9 +30,12 @@ import {
   EyeOff,
   Trash2,
   Reply,
-  Download
+  Download,
+  PanelLeft,
+  PictureInPicture2,
+  Columns2
 } from 'lucide-react';
-import { motion, AnimatePresence, useDragControls } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ChatMessage {
   id: string;
@@ -47,6 +51,8 @@ interface ChatMessage {
   replyToText?: string | null;
 }
 
+export type ChatMode = 'docked' | 'floating' | 'hidden' | 'sidebar';
+
 interface ChatBoxProps {
   channelId: string; // 'general' or 'invoice-[invoice-id]'
   currentUser: User | undefined;
@@ -54,8 +60,9 @@ interface ChatBoxProps {
   title?: string;
   placeholder?: string;
   heightClass?: string;
-  currentMode?: 'docked' | 'floating' | 'hidden';
-  onModeChange?: (mode: 'docked' | 'floating' | 'hidden') => void;
+  currentMode?: ChatMode;
+  onModeChange?: (mode: ChatMode) => void;
+  onMinimize?: () => void; // minimise to the floating chat button
   defaultCollapsed?: boolean;
   onMessagesLoaded?: (hasMessages: boolean) => void;
 }
@@ -111,6 +118,42 @@ const compressAndResizeImage = (file: File): Promise<string> => {
   });
 };
 
+// ---------- Floating window geometry (position + size, persisted) ----------
+type Rect = { x: number; y: number; w: number; h: number };
+const FLOAT_KEY = 'riyadah_chat_float';
+const SIDEBAR_KEY = 'riyadah_chat_sidebar_w';
+const MIN_W = 300;
+const MIN_H = 320;
+const defaultFloatRect = (): Rect => {
+  const w = Math.min(380, window.innerWidth - 32);
+  const h = Math.min(520, window.innerHeight - 48);
+  return { x: 24, y: Math.max(16, window.innerHeight - h - 24), w, h };
+};
+const clampRect = (r: Rect): Rect => {
+  const w = Math.max(Math.min(MIN_W, window.innerWidth), Math.min(r.w, window.innerWidth - 8));
+  const h = Math.max(Math.min(MIN_H, window.innerHeight), Math.min(r.h, window.innerHeight - 8));
+  return { w, h, x: Math.max(0, Math.min(r.x, window.innerWidth - w)), y: Math.max(0, Math.min(r.y, window.innerHeight - h)) };
+};
+const loadFloatRect = (): Rect => {
+  try {
+    const raw = localStorage.getItem(FLOAT_KEY);
+    if (raw) {
+      const r = JSON.parse(raw);
+      if ([r.x, r.y, r.w, r.h].every((n: any) => typeof n === 'number' && isFinite(n))) return clampRect(r);
+    }
+  } catch { /* ignore */ }
+  return defaultFloatRect();
+};
+const loadSidebarWidth = () => Math.max(300, Math.min(Number(localStorage.getItem(SIDEBAR_KEY)) || 380, 720));
+
+type Corner = 'tl' | 'tr' | 'bl' | 'br';
+const CORNER_STYLE: Record<Corner, { pos: string; cursor: string; border: string }> = {
+  tl: { pos: 'top-0 left-0', cursor: 'cursor-nwse-resize', border: 'border-t-2 border-l-2 rounded-tl-lg' },
+  tr: { pos: 'top-0 right-0', cursor: 'cursor-nesw-resize', border: 'border-t-2 border-r-2 rounded-tr-lg' },
+  bl: { pos: 'bottom-0 left-0', cursor: 'cursor-nesw-resize', border: 'border-b-2 border-l-2 rounded-bl-lg' },
+  br: { pos: 'bottom-0 right-0', cursor: 'cursor-nwse-resize', border: 'border-b-2 border-r-2 rounded-br-lg' },
+};
+
 export default function ChatBox({ 
   channelId, 
   currentUser, 
@@ -120,6 +163,7 @@ export default function ChatBox({
   heightClass = "h-[350px]",
   currentMode = 'docked',
   onModeChange,
+  onMinimize,
   defaultCollapsed = true,
   onMessagesLoaded
 }: ChatBoxProps) {
@@ -147,7 +191,72 @@ export default function ChatBox({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
-  const dragControls = useDragControls();
+  // Floating window geometry + sidebar width
+  const [floatRect, setFloatRect] = useState<Rect>(loadFloatRect);
+  const [sidebarW, setSidebarW] = useState<number>(loadSidebarWidth);
+  const rectRef = useRef(floatRect);
+  rectRef.current = floatRect;
+  const sidebarWRef = useRef(sidebarW);
+  sidebarWRef.current = sidebarW;
+
+  useEffect(() => {
+    const onResize = () => setFloatRect(r => clampRect(r));
+    const onReset = () => { setFloatRect(defaultFloatRect()); setSidebarW(380); };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('riyadah-reset-layout', onReset);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('riyadah-reset-layout', onReset);
+    };
+  }, []);
+
+  /** Generic pointer-drag helper: calls onMove(dx, dy) until release, then onEnd(). */
+  const trackPointer = (e: React.PointerEvent, onMove: (dx: number, dy: number) => void, onEnd: () => void) => {
+    const sx = e.clientX, sy = e.clientY;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    const move = (ev: PointerEvent) => onMove(ev.clientX - sx, ev.clientY - sy);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      document.body.style.userSelect = prevSelect;
+      onEnd();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  };
+
+  const saveFloatRect = () => { try { localStorage.setItem(FLOAT_KEY, JSON.stringify(rectRef.current)); } catch { /* ignore */ } };
+
+  const startMove = (e: React.PointerEvent) => {
+    if (currentMode !== 'floating' || (e.target as HTMLElement).closest('button')) return;
+    const start = rectRef.current;
+    trackPointer(e, (dx, dy) => setFloatRect(clampRect({ ...start, x: start.x + dx, y: start.y + dy })), saveFloatRect);
+  };
+
+  const startCornerResize = (corner: Corner) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const st = rectRef.current;
+    trackPointer(e, (dx, dy) => {
+      let { x, y, w, h } = st;
+      if (corner === 'tr' || corner === 'br') w = st.w + dx; else { w = st.w - dx; x = st.x + dx; }
+      if (corner === 'bl' || corner === 'br') h = st.h + dy; else { h = st.h - dy; y = st.y + dy; }
+      if (w < MIN_W) { if (corner === 'tl' || corner === 'bl') x = st.x + st.w - MIN_W; w = MIN_W; }
+      if (h < MIN_H) { if (corner === 'tl' || corner === 'tr') y = st.y + st.h - MIN_H; h = MIN_H; }
+      setFloatRect(clampRect({ x, y, w, h }));
+    }, saveFloatRect);
+  };
+
+  const startSidebarResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startW = sidebarWRef.current;
+    trackPointer(e, (dx) => setSidebarW(Math.max(300, Math.min(720, Math.min(window.innerWidth, startW + dx)))), () => {
+      try { localStorage.setItem(SIDEBAR_KEY, String(sidebarWRef.current)); } catch { /* ignore */ }
+    });
+  };
 
   // Export active chat thread messages to structured Excel file
   const handleExportChatToExcel = () => {
@@ -540,23 +649,23 @@ export default function ChatBox({
     return date.toLocaleString('ar-OM', { dateStyle: 'short', timeStyle: 'short' });
   };
 
+  const isOverlay = currentMode === 'floating' || currentMode === 'sidebar';
   const chatMarkup = (
-    <div className={`bg-white border rounded-2xl shadow-xl overflow-hidden flex flex-col w-full text-right transition-all duration-200 ${
-      currentMode === 'floating' 
-        ? 'border-teal-500/40 ring-4 ring-teal-500/5' 
-        : 'border-slate-100'
+    <div className={`border overflow-hidden flex flex-col w-full text-right transition-colors duration-200 ${
+      isOverlay
+        ? 'h-full bg-white/70 backdrop-blur-xl backdrop-saturate-150 border-white/70 shadow-2xl ring-1 ring-slate-900/5'
+        : 'bg-white shadow-xl border-slate-100'
+    } ${currentMode === 'sidebar' ? 'rounded-none rounded-e-2xl' : 'rounded-2xl'} ${
+      currentMode === 'floating' ? 'ring-4 ring-teal-500/10' : ''
     }`} dir="rtl">
       
       {/* Header (with drag capability if floating) */}
       <div 
-        onPointerDown={(e) => {
-          if (currentMode === 'floating') {
-            dragControls.start(e);
-          }
-        }}
-        className={`bg-slate-50/80 px-4 py-3 border-b border-slate-100 flex items-center justify-between select-none ${
-          currentMode === 'floating' ? 'cursor-grab active:cursor-grabbing' : ''
-        }`}
+        onPointerDown={startMove}
+        style={{ touchAction: currentMode === 'floating' ? 'none' : undefined }}
+        className={`px-4 py-3 border-b border-slate-100/80 flex items-center justify-between select-none shrink-0 ${
+          isOverlay ? 'bg-white/40' : 'bg-slate-50/80'
+        } ${currentMode === 'floating' ? 'cursor-grab active:cursor-grabbing' : ''}`}
       >
         <div className="flex items-center gap-2 overflow-hidden">
           {currentMode === 'floating' && (
@@ -590,47 +699,40 @@ export default function ChatBox({
             </button>
           )}
 
-          {/* Minimize / Expand Body Toggle */}
+          {/* Minimize → collapses the chat into the floating chat button */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setIsCollapsed(!isCollapsed);
+              if (onMinimize) onMinimize(); else setIsCollapsed(!isCollapsed);
             }}
             className="p-1 hover:bg-slate-200/60 text-slate-500 hover:text-slate-700 rounded-md transition-colors cursor-pointer"
-            title={isCollapsed ? "توسيع المحادثة" : "تصغير المحادثة"}
+            title={onMinimize ? "تصغير إلى زر عائم" : (isCollapsed ? "توسيع المحادثة" : "تصغير المحادثة")}
           >
-            {isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {onMinimize || !isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Dock to Float Trigger */}
-          {onModeChange && currentMode === 'docked' && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onModeChange('floating');
-              }}
-              className="p-1 hover:bg-slate-200/60 text-slate-500 hover:text-slate-700 rounded-md transition-colors cursor-pointer"
-              title="تحويل لنافذة عائمة"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* Float to Dock Trigger */}
-          {onModeChange && currentMode === 'floating' && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onModeChange('docked');
-              }}
-              className="p-1 hover:bg-slate-200/60 text-slate-500 hover:text-slate-700 rounded-md transition-colors cursor-pointer"
-              title="تثبيت جانبي"
-            >
-              <Minimize2 className="w-3.5 h-3.5" />
-            </button>
+          {/* Display mode switcher: docked / floating / left sidebar */}
+          {onModeChange && (
+            <div className="flex items-center gap-0.5 bg-slate-200/50 rounded-lg p-0.5">
+              {([
+                { mode: 'docked' as ChatMode, Icon: Columns2, title: 'تثبيت بجانب الصفحة' },
+                { mode: 'floating' as ChatMode, Icon: PictureInPicture2, title: 'نافذة عائمة قابلة للسحب' },
+                { mode: 'sidebar' as ChatMode, Icon: PanelLeft, title: 'شريط جانبي على يسار الشاشة' },
+              ]).map(({ mode, Icon, title: t }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onModeChange(mode); }}
+                  className={`p-1 rounded-md transition-colors cursor-pointer ${
+                    currentMode === mode ? 'bg-white text-teal-600 shadow-xs' : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                  }`}
+                  title={t}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Hide / Close Trigger */}
@@ -657,10 +759,10 @@ export default function ChatBox({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="flex flex-col overflow-hidden"
+            className={`flex flex-col overflow-hidden ${isOverlay ? 'flex-1 min-h-0' : ''}`}
           >
             {/* Messages area */}
-            <div ref={scrollContainerRef} className={`p-4 overflow-y-auto space-y-3.5 bg-slate-50/30 ${heightClass}`}>
+            <div ref={scrollContainerRef} className={`p-4 overflow-y-auto space-y-3.5 ${isOverlay ? 'bg-white/10 flex-1 min-h-0' : `bg-slate-50/30 ${heightClass}`}`}>
               {loading ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-slate-400 text-xs animate-pulse font-medium">جاري تحميل الرسائل...</div>
@@ -854,7 +956,7 @@ export default function ChatBox({
             </AnimatePresence>
 
             {/* Input container */}
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-100 bg-white flex flex-col gap-2 relative">
+            <form onSubmit={handleSendMessage} className={`p-3 border-t border-slate-100/80 flex flex-col gap-2 relative shrink-0 ${isOverlay ? 'bg-white/50' : 'bg-white'}`}>
               
               {/* Replying to message preview bar */}
               <AnimatePresence>
@@ -1008,20 +1110,47 @@ export default function ChatBox({
   );
 
   if (currentMode === 'floating') {
-    return (
-      <motion.div
-        drag
-        dragControls={dragControls}
-        dragListener={false}
-        dragMomentum={false}
-        initial={{ opacity: 0, scale: 0.95, y: 50 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="fixed bottom-6 left-6 w-[360px] z-[9999] shadow-2xl rounded-2xl"
-        style={{ touchAction: 'none' }}
+    return createPortal(
+      <div
+        className="fixed z-[9999] rounded-2xl"
+        style={{ left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h }}
       >
         {chatMarkup}
-      </motion.div>
+        {/* Corner resize handles (all four corners) */}
+        {(Object.keys(CORNER_STYLE) as Corner[]).map(c => (
+          <div
+            key={c}
+            onPointerDown={startCornerResize(c)}
+            style={{ touchAction: 'none' }}
+            className={`absolute ${CORNER_STYLE[c].pos} ${CORNER_STYLE[c].cursor} w-6 h-6 z-30 group flex items-center justify-center`}
+            title="اسحب لتغيير حجم النافذة"
+          >
+            <span className={`w-3 h-3 ${CORNER_STYLE[c].border} border-slate-400/70 group-hover:border-teal-500 group-hover:scale-125 transition-all`} />
+          </div>
+        ))}
+      </div>,
+      document.body
+    );
+  }
+
+  if (currentMode === 'sidebar') {
+    return createPortal(
+      <div
+        className="fixed top-0 bottom-0 left-0 z-[9999]"
+        style={{ width: Math.min(sidebarW, window.innerWidth) }}
+      >
+        {chatMarkup}
+        {/* Width resize handle on the inner (right) edge */}
+        <div
+          onPointerDown={startSidebarResize}
+          style={{ touchAction: 'none' }}
+          className="absolute top-0 bottom-0 -right-2 w-4 cursor-col-resize z-30 group flex items-center justify-center"
+          title="اسحب لتغيير عرض الشريط"
+        >
+          <div className="w-1 h-16 rounded-full bg-slate-400/60 group-hover:bg-teal-500 transition-colors" />
+        </div>
+      </div>,
+      document.body
     );
   }
 

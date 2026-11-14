@@ -1,7 +1,7 @@
 import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import { User, Warning, MailMessage, Invoice, Branch, PrivateMessage, Ticket } from '../types';
-import { User as UserIcon, AlertTriangle, Wallet, MessageSquare, Briefcase, Mail, Send, Plus, X, BarChart3, TrendingUp, ShieldAlert, CheckCircle, ChevronDown, CheckCheck, Check, Paperclip, Reply, Forward, Trash2, Save, Building, Camera, FileText, ShieldCheck, KeyRound, Smile, Clock, Lock, Unlock, CheckCircle2, XCircle, Users, Tag, DollarSign, Layers, Shield, Eye, HelpCircle, AlertCircle, FileCheck, Info, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { User as UserIcon, AlertTriangle, Wallet, MessageSquare, Briefcase, Mail, Send, Plus, X, BarChart3, TrendingUp, ShieldAlert, CheckCircle, ChevronDown, CheckCheck, Check, Paperclip, Reply, Forward, Trash2, Save, Building, Camera, FileText, ShieldCheck, KeyRound, Smile, Clock, Lock, Unlock, CheckCircle2, XCircle, Users, Tag, DollarSign, Layers, Shield, Eye, HelpCircle, AlertCircle, FileCheck, Info, SlidersHorizontal, Sparkles, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import EmployeeReportTab from './EmployeeReportTab';
@@ -21,6 +21,7 @@ interface ProfileSectionProps {
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   tickets?: Ticket[];
   onOpenPasswordModal: (userId?: string) => void;
+  onResetLayout?: () => void;
 }
 
 
@@ -46,7 +47,8 @@ export default function ProfileSection({
   privateMessages = [],
   setPrivateMessages,
   setUsers,
-  tickets = [],
+  tickets,
+  onResetLayout,
   onOpenPasswordModal,
   systemSettings,
 }: ProfileSectionProps) {
@@ -61,7 +63,7 @@ export default function ProfileSection({
     { id: 'warnings', label: 'الإنذارات والمخالفات', icon: AlertTriangle },
     { id: 'account', label: 'الحساب و ألأداء', icon: Wallet },
     { id: 'performance', label: 'المهارات والخبرات', icon: Briefcase },
-    { id: 'security', label: 'الأمان', icon: ShieldCheck },
+    { id: 'security', label: 'الإعدادات و الأمان', icon: ShieldCheck },
   ];
 
   const handleSendWarning = (newWarning: Warning) => {
@@ -151,7 +153,7 @@ export default function ProfileSection({
             />
           )}
           {activeTab === 'account' && <AccountTab user={displayedUser} invoices={invoices} />}
-          {activeTab === 'security' && <SecurityTab currentUser={displayedUser} onOpenPasswordModal={onOpenPasswordModal} />}
+          {activeTab === 'security' && <SecurityTab currentUser={displayedUser} onOpenPasswordModal={onOpenPasswordModal} onResetLayout={onResetLayout} />}
           {activeTab === 'performance' && <PerformanceTab user={displayedUser} invoices={invoices} />}
           {activeTab === 'report' && <EmployeeReportTab user={displayedUser} invoices={invoices} warnings={warnings} tickets={tickets} branches={branches} />}
         </motion.div>
@@ -160,7 +162,7 @@ export default function ProfileSection({
   );
 }
 
-function SecurityTab({ currentUser, onOpenPasswordModal }: { currentUser: User, onOpenPasswordModal: (userId?: string) => void }) {
+function SecurityTab({ currentUser, onOpenPasswordModal, onResetLayout }: { currentUser: User, onOpenPasswordModal: (userId?: string) => void, onResetLayout?: () => void }) {
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
       <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
@@ -168,7 +170,7 @@ function SecurityTab({ currentUser, onOpenPasswordModal }: { currentUser: User, 
           <ShieldCheck className="w-6 h-6" />
         </div>
         <div>
-          <h3 className="text-lg font-bold text-slate-800">إعدادات الأمان وحماية الحساب</h3>
+          <h3 className="text-lg font-bold text-slate-800">الإعدادات و الأمان</h3>
           <p className="text-sm text-slate-500">إدارة كلمة المرور وإعدادات الأمان الخاصة بحسابك</p>
         </div>
       </div>
@@ -186,6 +188,27 @@ function SecurityTab({ currentUser, onOpenPasswordModal }: { currentUser: User, 
           تغيير كلمة المرور
         </button>
       </div>
+
+      {onResetLayout && (
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200/60 gap-4">
+          <div>
+            <h4 className="font-bold text-slate-800 text-sm">إعادة تعيين النوافذ والتخطيط</h4>
+            <p className="text-xs text-slate-500 mt-1">يعيد موضع وحجم نافذة المحادثة، وعرض أعمدة جدول الفواتير، وبقية إعدادات العرض إلى وضعها الافتراضي.</p>
+          </div>
+          <button
+            onClick={() => {
+              if (window.confirm('هل تريد إعادة تعيين مواضع النوافذ وأحجامها وأعمدة الجداول إلى الوضع الافتراضي؟')) {
+                onResetLayout();
+                toast.success('تمت إعادة تعيين النوافذ والتخطيط');
+              }
+            }}
+            className="flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4" />
+            إعادة تعيين النوافذ
+          </button>
+        </div>
+      )}
     </div>
   );
 }
